@@ -1322,6 +1322,125 @@ class RepoDetailViewModel(
         }
     }
 
+    fun downloadWorkflowArtifacts(runId: Long, context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) {
+                _isLoading.value = true
+                _statusMessage.value = "Fetching build artifacts..."
+            }
+            try {
+                if (tokenManager.isDemoMode()) {
+                    delay(1500)
+                    val mockApkBytes = "Mock Release APK Content".toByteArray()
+                    val savedFile = DownloadUtils.saveBinaryToDownloads(
+                        context,
+                        "Artifacts",
+                        "Hfm-Release-Demo.apk",
+                        mockApkBytes
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (savedFile != null) {
+                            _statusMessage.value = "Demo APK saved to Downloads/FastGit/Artifacts/Hfm-Release-Demo.apk"
+                            Toast.makeText(context, "Demo APK downloaded successfully!", Toast.LENGTH_LONG).show()
+                        } else {
+                            _statusMessage.value = "Failed to save Demo APK to local storage"
+                        }
+                    }
+                    return@launch
+                }
+
+                val api = RetrofitClient.getService(tokenManager)
+                AppLogger.i("Artifacts", "Fetching artifacts list for run ID: $runId")
+                
+                val response = api.getWorkflowRunArtifacts(owner, repoName, runId)
+                val artifacts = response.artifacts ?: emptyList()
+                
+                if (artifacts.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        _statusMessage.value = "No build artifacts found for this run."
+                        Toast.makeText(context, "No artifacts found to download.", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                AppLogger.i("Artifacts", "Found ${artifacts.size} artifacts. Starting download...")
+
+                for (artifact in artifacts) {
+                    if (artifact.expired == true) {
+                        AppLogger.i("Artifacts", "Artifact '${artifact.name}' has expired. Skipping.")
+                        continue
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        _statusMessage.value = "Downloading artifact: ${artifact.name}..."
+                    }
+
+                    val downloadResponse = api.downloadArtifact(owner, repoName, artifact.id)
+                    if (downloadResponse.isSuccessful && downloadResponse.body() != null) {
+                        val body = downloadResponse.body()!!
+                        
+                        // Save stream as a temporary ZIP file in cache
+                        val tempZipFile = File(context.cacheDir, "artifact_${artifact.id}.zip")
+                        body.byteStream().use { input ->
+                            tempZipFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+
+                        // Create extraction directory inside cache
+                        val extractionDir = File(context.cacheDir, "extracted_artifact_${artifact.id}")
+                        if (extractionDir.exists()) extractionDir.deleteRecursively()
+                        extractionDir.mkdirs()
+
+                        // Unzip the downloaded artifact ZIP file
+                        val extractedFiles = ZipUtils.unzip(tempZipFile.inputStream(), extractionDir)
+                        AppLogger.s("Artifacts", "Extracted ${extractedFiles.size} files from artifact ZIP.")
+
+                        // Copy each extracted file to public Downloads/FastGit/Artifacts directory
+                        for (file in extractedFiles) {
+                            val fileBytes = file.readBytes()
+                            val savedFile = DownloadUtils.saveBinaryToDownloads(
+                                context,
+                                "Artifacts",
+                                file.name,
+                                fileBytes
+                            )
+                            if (savedFile != null) {
+                                AppLogger.s("Artifacts", "Saved extracted artifact: ${file.name}")
+                            }
+                        }
+
+                        // Clean up temporary workspace files
+                        tempZipFile.delete()
+                        extractionDir.deleteRecursively()
+
+                        withContext(Dispatchers.Main) {
+                            _statusMessage.value = "Artifact '${artifact.name}' downloaded & extracted successfully!"
+                            Toast.makeText(context, "Downloaded '${artifact.name}' to Downloads/FastGit/Artifacts", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        val errorMsg = downloadResponse.errorBody()?.string() ?: downloadResponse.message()
+                        AppLogger.e("Artifacts", "Failed to download artifact '${artifact.name}': $errorMsg")
+                        withContext(Dispatchers.Main) {
+                            _statusMessage.value = "Failed to download '${artifact.name}': $errorMsg"
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
+                AppLogger.e("Artifacts", "Error downloading run artifacts: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Artifact download failed: ${e.message}"
+                    Toast.makeText(context, "Artifact download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    _isLoading.value = false
+                }
+            }
+        }
+    }
+
     fun clearWorkflowLogs() {
         _workflowLogs.value = null
         // Ensure any active log background polling task is immediately halted on dialog dismiss
