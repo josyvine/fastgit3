@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -255,19 +256,69 @@ fun RepoDetailScreen(
                                 fontSize = 15.sp
                             )
                         }
-                        IconButton(
-                            onClick = {
-                                selectedRunForLogs = null
-                                repoDetailViewModel.clearWorkflowLogs()
-                            },
-                            modifier = Modifier.size(36.dp)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close Logs",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            // Download APK button (Only visible if run is successful)
+                            if (selectedRunForLogs?.status == "completed" && selectedRunForLogs?.conclusion == "success") {
+                                var showConfirmDownloadDialog by remember { mutableStateOf(false) }
+                                
+                                IconButton(
+                                    onClick = { showConfirmDownloadDialog = true },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = "Download Artifacts",
+                                        tint = GhSuccessGreen,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                if (showConfirmDownloadDialog) {
+                                    AlertDialog(
+                                        onDismissRequest = { showConfirmDownloadDialog = false },
+                                        title = { Text("Download Build Artifacts?", color = Color.White, fontWeight = FontWeight.Bold) },
+                                        text = { Text("Do you want to download and extract the build APK artifacts from this run to your local storage?", color = GhTextSecondaryDark) },
+                                        confirmButton = {
+                                            Button(
+                                                onClick = {
+                                                    showConfirmDownloadDialog = false
+                                                    selectedRunForLogs?.let { run ->
+                                                        repoDetailViewModel.downloadWorkflowArtifacts(run.id, context)
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = GhSuccessGreen)
+                                            ) {
+                                                Text("Download")
+                                            }
+                                        },
+                                        dismissButton = {
+                                            TextButton(onClick = { showConfirmDownloadDialog = false }) {
+                                                Text("Cancel", color = Color.White)
+                                            }
+                                        },
+                                        containerColor = GhSurfaceDark
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    selectedRunForLogs = null
+                                    repoDetailViewModel.clearWorkflowLogs()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close Logs",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
 
@@ -1124,6 +1175,7 @@ fun TreeItemNodeRow(
     onDeleteItem: (FileItem) -> Unit,
     onDownloadFolderZip: (FileItem) -> Unit
 ) {
+    val context = LocalContext.current
     var showContextMenu by remember { mutableStateOf(false) }
     var showPlusMenu by remember { mutableStateOf(false) }
 
@@ -1284,6 +1336,10 @@ fun TreeItemNodeRow(
                     text = { Text("Copy Folder Path", color = Color.White) },
                     onClick = {
                         showContextMenu = false
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Folder Path", item.path)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "Folder path copied to clipboard!", Toast.LENGTH_SHORT).show()
                         onCopyItem(item)
                     },
                     leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = GhAccentBlue) }
@@ -1325,6 +1381,10 @@ fun TreeItemNodeRow(
                     text = { Text("Copy File", color = Color.White) },
                     onClick = {
                         showContextMenu = false
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("File Path", item.path)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "File path copied to clipboard!", Toast.LENGTH_SHORT).show()
                         onCopyItem(item)
                     },
                     leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = GhAccentBlue) }
