@@ -13,6 +13,7 @@ import com.vineyard.fastgit.app.models.*
 import com.vineyard.fastgit.app.network.RetrofitClient
 import com.vineyard.fastgit.app.utils.AppLogger
 import com.vineyard.fastgit.app.utils.TokenManager
+import com.vineyard.fastgit.app.utils.DownloadUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +47,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
+
+    // Dynamic Repository Directories States
+    private val _repoDirectories = MutableStateFlow<List<String>>(emptyList())
+    val repoDirectories: StateFlow<List<String>> = _repoDirectories
+
+    // Raw URL Downloader Progress States
+    private val _isDownloadingUrls = MutableStateFlow(false)
+    val isDownloadingUrls: StateFlow<Boolean> = _isDownloadingUrls
+
+    private val _downloadStep = MutableStateFlow("")
+    val downloadStep: StateFlow<String> = _downloadStep
 
     init {
         _themeMode.value = "System"
@@ -137,8 +149,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun loadUserRepositories() {
         if (tokenManager.isDemoMode()) {
             _repositories.value = listOf(
-                Repository(id = 1, name = "FastGit-Android", fullName = "developer_android/FastGit-Android"),
-                Repository(id = 2, name = "FastGit-Backend", fullName = "developer_android/FastGit-Backend")
+                Repository(id = 1, name = "FastGit-Android", fullName = "developer_android/FastGit-Android", defaultBranch = "main"),
+                Repository(id = 2, name = "FastGit-Backend", fullName = "developer_android/FastGit-Backend", defaultBranch = "main")
             )
             return
         }
@@ -149,6 +161,168 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 _repositories.value = repos
             } catch (e: Exception) {
                 AppLogger.e("Settings", "Failed to fetch repositories list: ${e.message}", e)
+            }
+        }
+    }
+
+    // Fetches the repository recursive tree structure to filter all folders/directories
+    fun fetchDirectoriesForRepository(owner: String, repoName: String, branch: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _repoDirectories.value = emptyList()
+            try {
+                if (tokenManager.isDemoMode()) {
+                    delay(1000)
+                    _repoDirectories.value = listOf(
+                        "",
+                        "app",
+                        "app/src",
+                        "app/src/main",
+                        "app/src/main/java",
+                        "app/src/main/res",
+                        "database",
+                        "models",
+                        "network",
+                        "ui",
+                        "utils",
+                        "viewmodel"
+                    )
+                    AppLogger.s("Settings", "Simulated directory listing in Demo Mode")
+                } else {
+                    val targetBranch = branch.ifBlank { "main" }
+                    val api = RetrofitClient.getService(tokenManager)
+                    AppLogger.i("Settings", "Fetching recursive tree for folders: $owner/$repoName ($targetBranch)")
+                    val response = api.getRecursiveTree(owner, repoName, targetBranch)
+                    
+                    // Filter out only directories (type == "tree")
+                    val dirs = response.tree
+                        .filter { it.type == "tree" }
+                        .map { it.path }
+                        .sorted()
+                    
+                    // Add empty string to indicate "root" of the repository
+                    _repoDirectories.value = listOf("") + dirs
+                    AppLogger.s("Settings", "Fetched ${dirs.size} folders successfully.")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("Settings", "Failed to fetch directories list: ${e.message}", e)
+                _statusMessage.value = "Failed to fetch folders: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    // Recursively scans the targeted folder, builds the GitHub raw URLs, and downloads them in a numbered text file
+    fun downloadRawUrlsForDirectory(owner: String, repoName: String, branch: String, directory: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) {
+                _isDownloadingUrls.value = true
+                _downloadStep.value = "Contacting GitHub API..."
+            }
+
+            try {
+                val targetBranch = branch.ifBlank { "main" }
+                val urlsList = mutableListOf<String>()
+
+                if (tokenManager.isDemoMode()) {
+                    withContext(Dispatchers.Main) {
+                        _downloadStep.value = "Scanning folder hierarchy (Demo Mode)..."
+                    }
+                    delay(1500)
+                    
+                    val prefix = if (directory.isEmpty()) "" else "$directory/"
+                    val mockPaths = listOf(
+                        "${prefix}MainActivity.kt",
+                        "${prefix}DatabaseComponents.kt",
+                        "${prefix}Models.kt",
+                        "${prefix}GitHubApiService.kt",
+                        "${prefix}RetrofitClient.kt",
+                        "${prefix}MainScreen.kt"
+                    )
+                    
+                    mockPaths.forEach { path ->
+                        val cleanPath = path.removePrefix("/")
+                        val rawUrl = "https://raw.githubusercontent.com/$owner/$repoName/$targetBranch/$cleanPath"
+                        urlsList.add(rawUrl)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        _downloadStep.value = "Fetching recursive repository tree..."
+                    }
+                    val api = RetrofitClient.getService(tokenManager)
+                    val response = api.getRecursiveTree(owner, repoName, targetBranch)
+
+                    withContext(Dispatchers.Main) {
+                        _downloadStep.value = "Scanning files inside directory: /${directory.ifEmpty { "root" }}..."
+                    }
+
+                    // Filter all file nodes (type == "blob") located inside the selected directory tree path
+                    val matchingFiles = response.tree.filter { entry ->
+                        entry.type == "blob" && (directory.isEmpty() || entry.path.startsWith("$directory/"))
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        _downloadStep.value = "Generating raw path structures for ${matchingFiles.size} files..."
+                    }
+
+                    matchingFiles.forEach { entry ->
+                        val rawUrl = "https://raw.githubusercontent.com/$owner/$repoName/$targetBranch/${entry.path}"
+                        urlsList.add(rawUrl)
+                    }
+                }
+
+                if (urlsList.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        _statusMessage.value = "No files found in folder /${directory.ifEmpty { "root" }}."
+                        _isDownloadingUrls.value = false
+                    }
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    _downloadStep.value = "Assembling raw URLs text database..."
+                }
+
+                // Assemble numbered string list
+                val contentBuilder = StringBuilder()
+                urlsList.forEachIndexed { index, url ->
+                    contentBuilder.append("${index + 1}. $url\n")
+                }
+
+                withContext(Dispatchers.Main) {
+                    _downloadStep.value = "Saving file to device directory..."
+                }
+
+                val safeDirName = directory.replace('/', '_').ifEmpty { "root" }
+                val exportFileName = "raw_urls_${repoName}_$safeDirName.txt"
+
+                val savedFile = DownloadUtils.saveTextToDownloads(
+                    context = getApplication(),
+                    subFolder = "Urls",
+                    fileName = exportFileName,
+                    content = contentBuilder.toString()
+                )
+
+                withContext(Dispatchers.Main) {
+                    if (savedFile != null) {
+                        _statusMessage.value = "URLs saved successfully to: Downloads/FastGit/Urls/$exportFileName"
+                        AppLogger.s("Settings", "Raw URLs exported successfully: $exportFileName")
+                    } else {
+                        _statusMessage.value = "Local system failed to write exports file."
+                    }
+                }
+
+            } catch (e: Exception) {
+                AppLogger.e("Settings", "Raw URL generation sequence crashed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Export process failed: ${e.message}"
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    _isDownloadingUrls.value = false
+                    _downloadStep.value = ""
+                }
             }
         }
     }
