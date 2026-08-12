@@ -86,20 +86,26 @@ object RetrofitClient {
             }
 
             val authInterceptor = Interceptor { chain ->
-                val original = chain.request()
-                val requestBuilder = original.newBuilder()
+                val request = chain.request()
+                val requestBuilder = request.newBuilder()
                     .header("Accept", "application/vnd.github.v3+json")
 
-                val token = tokenManager.getToken()
-                if (!token.isNullOrBlank()) {
-                    requestBuilder.header("Authorization", "Bearer $token")
+                val host = request.url.host
+                if (host.contains("github.com", ignoreCase = true)) {
+                    val token = tokenManager.getToken()
+                    if (!token.isNullOrBlank()) {
+                        requestBuilder.header("Authorization", "Bearer $token")
+                    }
+                } else {
+                    // Securely remove the Authorization header on external redirects to avoid S3 rejection
+                    requestBuilder.removeHeader("Authorization")
                 }
 
                 chain.proceed(requestBuilder.build())
             }
 
             val okHttpClient = OkHttpClient.Builder()
-                .addInterceptor(authInterceptor)
+                .addNetworkInterceptor(authInterceptor)
                 .addInterceptor(loggingInterceptor)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
