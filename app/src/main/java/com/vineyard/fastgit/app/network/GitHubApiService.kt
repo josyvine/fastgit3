@@ -205,6 +205,21 @@ interface GitHubApiService {
         @Path("job_id") jobId: Long
     ): ResponseBody
 
+    @GET("repos/{owner}/{repo}/actions/runs/{run_id}/artifacts")
+    suspend fun getWorkflowRunArtifacts(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("run_id") runId: Long
+    ): WorkflowRunArtifactsResponse
+
+    @Streaming
+    @GET("repos/{owner}/{repo}/actions/artifacts/{artifact_id}/zip")
+    suspend fun downloadArtifact(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("artifact_id") artifactId: Long
+    ): Response<ResponseBody>
+
     // Repository Secrets Management API
     @GET("repos/{owner}/{repo}/actions/secrets/public-key")
     suspend fun getActionsPublicKey(
