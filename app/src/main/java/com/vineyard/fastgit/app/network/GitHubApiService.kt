@@ -217,7 +217,7 @@ interface GitHubApiService {
     suspend fun downloadArtifact(
         @Path("owner") owner: String,
         @Path("repo") repo: String,
-        @Path("artifact_id") artifactId: Long
+        @Path(value = "artifact_id") artifactId: Long
     ): Response<ResponseBody>
 
     // Repository Secrets Management API
@@ -269,12 +269,12 @@ data class WorkflowJob(
     val name: String,
     val status: String,
     val conclusion: String?,
-    val steps: List<WorkflowStep>? = emptyList() // Added steps tracking to parse runner step details
+    val steps: List<WorkflowStep>? = emptyList()
 )
 
 data class WorkflowStep(
     val name: String,
-    val status: String, // "queued", "in_progress", "completed"
-    val conclusion: String?, // "success", "failure", "cancelled"
+    val status: String,
+    val conclusion: String?,
     val number: Int
 )
