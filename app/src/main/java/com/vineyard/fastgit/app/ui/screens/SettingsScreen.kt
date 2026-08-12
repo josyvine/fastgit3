@@ -11,12 +11,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +45,11 @@ fun SettingsScreen(
     val statusMessage by settingsViewModel.statusMessage.collectAsState()
     val isLoading by settingsViewModel.isLoading.collectAsState()
 
+    // Raw URL Downloader Feature States
+    val repoDirectories by settingsViewModel.repoDirectories.collectAsState()
+    val isDownloadingUrls by settingsViewModel.isDownloadingUrls.collectAsState()
+    val downloadStep by settingsViewModel.downloadStep.collectAsState()
+
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     // local Form Input States
@@ -51,11 +60,17 @@ fun SettingsScreen(
     var keyAliasInput by remember { mutableStateOf("") }
     var keyPasswordInput by remember { mutableStateOf("") }
 
-    // local Dropdowns States
+    // local Dropdowns States (Secret Propagation)
     var selectedRepo by remember { mutableStateOf<Repository?>(null) }
     var selectedAlias by remember { mutableStateOf("") }
     var repoDropdownExpanded by remember { mutableStateOf(false) }
     var aliasDropdownExpanded by remember { mutableStateOf(false) }
+
+    // local Dropdowns States (Raw URL Downloader)
+    var selectedDownloaderRepo by remember { mutableStateOf<Repository?>(null) }
+    var selectedDownloaderDir by remember { mutableStateOf("") }
+    var downloaderRepoDropdownExpanded by remember { mutableStateOf(false) }
+    var downloaderDirDropdownExpanded by remember { mutableStateOf(false) }
 
     // Status / Messages Handler
     statusMessage?.let { msg ->
@@ -366,6 +381,167 @@ fun SettingsScreen(
             }
         }
 
+        // Raw URL Downloader Management Card
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = GhSurfaceDark),
+            border = ButtonDefaults.outlinedButtonBorder(enabled = true),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    text = "Raw URL Downloader",
+                    fontWeight = FontWeight.Bold,
+                    color = GhAccentBlue,
+                    fontSize = 14.sp
+                )
+
+                Text(
+                    text = "Recursively scan a repository folder, generate raw GitHub paths for all underlying files, and compile them into a numbered index list document.",
+                    fontSize = 12.sp,
+                    color = GhTextSecondaryDark
+                )
+
+                Divider(color = GhCardBorderDark)
+
+                // Select Target Repository Dropdown
+                Text(
+                    text = "Select Repository",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = Color.White
+                )
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { downloaderRepoDropdownExpanded = true },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedDownloaderRepo?.fullName ?: "Select Target Repository",
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = GhAccentBlue)
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = downloaderRepoDropdownExpanded,
+                        onDismissRequest = { downloaderRepoDropdownExpanded = false },
+                        modifier = Modifier
+                            .background(GhSurfaceDark)
+                            .fillMaxWidth(0.85f)
+                    ) {
+                        repositories.forEach { repo ->
+                            DropdownMenuItem(
+                                text = { Text(repo.fullName, color = Color.White) },
+                                onClick = {
+                                    selectedDownloaderRepo = repo
+                                    selectedDownloaderDir = "" // Reset directory selection
+                                    downloaderRepoDropdownExpanded = false
+                                    // Trigger dynamic directory structure scan
+                                    settingsViewModel.fetchDirectoriesForRepository(
+                                        owner = repo.owner?.login ?: "",
+                                        repoName = repo.name,
+                                        branch = repo.defaultBranch
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Select Folder / Directory Dropdown
+                Text(
+                    text = "Select Folder / Directory",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = Color.White
+                )
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { downloaderDirDropdownExpanded = true },
+                        enabled = selectedDownloaderRepo != null,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color.White,
+                            disabledContentColor = GhTextSecondaryDark
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (selectedDownloaderDir.isEmpty()) "root (All Files)" else "/$selectedDownloaderDir",
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = GhAccentBlue)
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = downloaderDirDropdownExpanded,
+                        onDismissRequest = { downloaderDirDropdownExpanded = false },
+                        modifier = Modifier
+                            .background(GhSurfaceDark)
+                            .fillMaxWidth(0.85f)
+                    ) {
+                        repoDirectories.forEach { dir ->
+                            DropdownMenuItem(
+                                text = { Text(if (dir.isEmpty()) "root" else "/$dir", color = Color.White) },
+                                onClick = {
+                                    selectedDownloaderDir = dir
+                                    downloaderDirDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Run Raw URL Downloader Action Button
+                Button(
+                    onClick = {
+                        selectedDownloaderRepo?.let { repo ->
+                            settingsViewModel.downloadRawUrlsForDirectory(
+                                owner = repo.owner?.login ?: "",
+                                repoName = repo.name,
+                                branch = repo.defaultBranch,
+                                directory = selectedDownloaderDir
+                            )
+                        }
+                    },
+                    enabled = selectedDownloaderRepo != null && !isDownloadingUrls && !isLoading,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GhAccentBlue,
+                        disabledContainerColor = GhCardBorderDark
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Download Raw URLs List", fontWeight = FontWeight.Bold, color = Color.Black)
+                    }
+                }
+            }
+        }
+
         // Account & Security Card
         Card(
             shape = RoundedCornerShape(12.dp),
@@ -432,6 +608,42 @@ fun SettingsScreen(
                     Text("Cancel", color = Color.White)
                 }
             },
+            containerColor = GhSurfaceDark
+        )
+    }
+
+    // Modal Process Loading Overlay Dialog
+    if (isDownloadingUrls) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(
+                    text = "Raw URL Downloader",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = GhAccentBlue,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Text(
+                        text = downloadStep,
+                        color = Color.LightGray,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {},
             containerColor = GhSurfaceDark
         )
     }
