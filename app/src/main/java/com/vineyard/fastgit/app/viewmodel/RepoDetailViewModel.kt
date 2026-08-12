@@ -359,7 +359,8 @@ class RepoDetailViewModel(
         viewModelScope.launch {
             try {
                 if (tokenManager.isDemoMode()) {
-                    _fileContent.value = fileItem.content ?: "// Sample Code Content for ${fileItem.name}\npackage com.vineyard.fastgit.app\n\nclass ${fileItem.name.removeSuffix(\".kt\")} {\n    fun init() {\n        println(\"FastGit Explorer\")\n    }\n}"
+                    val className = fileItem.name.removeSuffix(".kt")
+                    _fileContent.value = fileItem.content ?: "// Sample Code Content for ${fileItem.name}\npackage com.vineyard.fastgit.app\n\nclass $className {\n    fun init() {\n        println(\"FastGit Explorer\")\n    }\n}"
                     AppLogger.s("CodeEditor", "Opened file in Demo Mode: ${fileItem.name}")
                     _activeFile.value = fileItem // Transition UI once loading is safe and complete
                 } else {
