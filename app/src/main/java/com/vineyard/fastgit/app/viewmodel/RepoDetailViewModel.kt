@@ -13,9 +13,6 @@ import androidx.lifecycle.viewModelScope
 import com.vineyard.fastgit.app.models.*
 import com.vineyard.fastgit.app.network.GitHubApiService
 import com.vineyard.fastgit.app.network.RetrofitClient
-import com.vineyard.fastgit.app.network.WorkflowRunJobsResponse
-import com.vineyard.fastgit.app.network.WorkflowJob
-import com.vineyard.fastgit.app.network.WorkflowStep
 import com.vineyard.fastgit.app.utils.AppLogger
 import com.vineyard.fastgit.app.utils.DownloadUtils
 import com.vineyard.fastgit.app.utils.TokenManager
@@ -74,7 +71,7 @@ class RepoDetailViewModel(
 
     // Issues
     private val _issues = MutableStateFlow<List<Issue>>(emptyList())
-    val issues: StateFlow<List<Issue>> = _issues
+         val issues: StateFlow<List<Issue>> = _issues
 
     // Actions & Workflows
     private val _workflows = MutableStateFlow<List<Workflow>>(emptyList())
