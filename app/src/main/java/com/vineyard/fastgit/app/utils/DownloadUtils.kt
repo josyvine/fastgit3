@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.webkit.MimeTypeMap
 import com.vineyard.fastgit.app.models.FileItem
 import java.io.File
 import java.io.FileOutputStream
@@ -77,11 +78,18 @@ object DownloadUtils {
      * using MediaStore on Android 10+ (API 29+) or File API on older versions.
      */
     fun saveBinaryToDownloads(context: Context, subFolder: String, fileName: String, bytes: ByteArray): File? {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        val mimeType = when (extension) {
+            "apk" -> "application/vnd.android.package-archive"
+            "zip" -> "application/zip"
+            else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val relativePath = if (subFolder.isEmpty()) "Download/FastGit" else "Download/FastGit/$subFolder"
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
             }
             val contentUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI
