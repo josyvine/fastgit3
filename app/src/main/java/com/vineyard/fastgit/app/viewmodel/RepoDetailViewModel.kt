@@ -1562,6 +1562,14 @@ class RepoDetailViewModel(
         return null
     }
 
+    fun getDeepestSingleDirectoryPath(item: FileItem): String {
+        var current = item
+        while (current.type == "dir" && current.children.size == 1 && current.children.first().type == "dir") {
+            current = current.children.first()
+        }
+        return current.path
+    }
+
     override fun onCleared() {
         super.onCleared()
         pollingJob?.cancel()
