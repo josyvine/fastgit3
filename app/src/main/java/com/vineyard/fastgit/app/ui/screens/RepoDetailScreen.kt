@@ -913,6 +913,7 @@ fun ExplorerTabContent(
                         item = item,
                         explorerMode = explorerMode,
                         copiedItem = copiedItem,
+                        repoDetailViewModel = repoDetailViewModel,
                         onItemClick = { target ->
                             if (target.type == "dir") {
                                 if (explorerMode == 1) {
@@ -1166,6 +1167,7 @@ fun TreeItemNodeRow(
     item: FileItem,
     explorerMode: Int,
     copiedItem: FileItem?,
+    repoDetailViewModel: RepoDetailViewModel,
     onItemClick: (FileItem) -> Unit,
     onOpenFolderDirect: (FileItem) -> Unit,
     onCreateFileInFolder: (FileItem) -> Unit,
@@ -1337,8 +1339,9 @@ fun TreeItemNodeRow(
                     text = { Text("Copy Folder Path", color = Color.White) },
                     onClick = {
                         showContextMenu = false
+                        val deepestPath = repoDetailViewModel.getDeepestSingleDirectoryPath(item)
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Folder Path", item.path)
+                        val clip = ClipData.newPlainText("Folder Path", deepestPath)
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, "Folder path copied to clipboard!", Toast.LENGTH_SHORT).show()
                         onCopyItem(item)
