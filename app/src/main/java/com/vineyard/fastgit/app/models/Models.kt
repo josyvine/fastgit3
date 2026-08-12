@@ -184,6 +184,23 @@ data class WorkflowListResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class WorkflowRunArtifactsResponse(
+    @Json(name = "total_count") val totalCount: Int = 0,
+    val artifacts: List<WorkflowArtifact> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class WorkflowArtifact(
+    val id: Long = 0,
+    val name: String = "",
+    @Json(name = "size_in_bytes") val sizeInBytes: Long = 0,
+    @Json(name = "archive_download_url") val archiveDownloadUrl: String = "",
+    val expired: Boolean = false,
+    @Json(name = "created_at") val createdAt: String? = null,
+    @Json(name = "expires_at") val expiresAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class Release(
     val id: Long = 0,
     @Json(name = "tag_name") val tagName: String = "",
