@@ -29,7 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -74,6 +76,7 @@ fun RepoDetailScreen(
     var isExplorerMaximized by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
 
     // File launcher for ZIP upload
     val zipPickerLauncher = rememberLauncherForActivityResult(
@@ -364,9 +367,7 @@ fun RepoDetailScreen(
                                 text = { Text("Copy Build Logs", color = Color.White) },
                                 onClick = {
                                     showLogsContextMenu = false
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("Build Logs", workflowLogs ?: "")
-                                    clipboard.setPrimaryClip(clip)
+                                    clipboardManager.setText(AnnotatedString(workflowLogs ?: ""))
                                     Toast.makeText(context, "Build logs copied to clipboard!", Toast.LENGTH_SHORT).show()
                                 },
                                 leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = GhAccentBlue) }
